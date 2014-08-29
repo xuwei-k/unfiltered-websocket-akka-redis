@@ -4,11 +4,12 @@ import akka.actor.Props
 import java.net.InetSocketAddress
 import redis.actors.RedisSubscriberActor
 import redis.api.pubsub.{PMessage, Message}
+import scalaz.concurrent.Actor
 
 object RedisActor{
 
-  def apply(config: Config): Props =
-    Props(new RedisActor(config))
+  def apply(config: Config, callback: Actor[SessionManager.Message]): Props =
+    Props(new RedisActor(config, callback))
 
   final case class Config(
     host: String,
@@ -19,7 +20,7 @@ object RedisActor{
 }
 
 
-final class RedisActor(config: RedisActor.Config) extends RedisSubscriberActor(
+final class RedisActor(config: RedisActor.Config, callback: Actor[SessionManager.Message]) extends RedisSubscriberActor(
   address = new InetSocketAddress(config.host, config.port),
   channels = Nil,
   patterns = Nil,
@@ -27,7 +28,7 @@ final class RedisActor(config: RedisActor.Config) extends RedisSubscriberActor(
 ){
 
   override def onMessage(m: Message): Unit ={
-    context.parent ! m
+    callback ! SessionManager.FromRedis(m.data)
   }
 
   override def onPMessage(m: PMessage): Unit ={

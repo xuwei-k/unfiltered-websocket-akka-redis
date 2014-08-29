@@ -1,7 +1,9 @@
 package chat
 
-import akka.actor.{Props, ActorSystem}
+import akka.actor.{ActorRef, ActorSystem}
 import redis.RedisClient
+import redis.api.pubsub.SUBSCRIBE
+import unfiltered.netty.websockets.SocketCallback
 import unfiltered.request.{Seg, Path, GET}
 import unfiltered.response.Html5
 
@@ -14,14 +16,16 @@ object App {
     val port = 6379
     val config = RedisActor.Config(host, port, None)
     val publisher = RedisClient(config.host, config.port, config.password)(system)
-    val manager = system.actorOf(Props(new SessionManager(config, publisher)), "session-manager")
+    val manager = SessionManager(config, publisher)
+    val subscriber = system.actorOf(RedisActor(config, manager), "subscriber")
+    subscriber ! SUBSCRIBE(SessionManager.channel)
 
     try{
       unfiltered.netty.Server.anylocal.handler(
         unfiltered.netty.websockets.Planify({
           case _ => {
-            case message =>
-              manager ! message
+            case message: SocketCallback =>
+              manager ! SessionManager.WebSocketEvent(message)
           }
         })
       ).run { websocketServer =>

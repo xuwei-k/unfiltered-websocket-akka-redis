@@ -12,5 +12,6 @@ libraryDependencies ++= (
   ("net.databinder" %% "unfiltered-netty-websockets" % "0.8.1") ::
   ("com.typesafe.akka" %% "akka-actor" % "2.3.5") ::
   ("com.etaty.rediscala" %% "rediscala" % "1.3.1").exclude("com.typesafe.akka", "akka-actor_" + scalaBinaryVersion.value) ::
+  ("org.scalaz" %% "scalaz-concurrent" % "7.1.0") ::
   Nil
 )

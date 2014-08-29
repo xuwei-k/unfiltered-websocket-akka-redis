@@ -1,60 +1,51 @@
 package chat
 
-import akka.actor._
 import redis.RedisClient
-import redis.api.pubsub.{UNSUBSCRIBE, SUBSCRIBE}
-import unfiltered.netty.websockets._
+import unfiltered.netty.websockets.{Message => WebSocketMessage, _}
+import scala.collection.mutable
+import scalaz.concurrent.Actor
 
 object SessionManager {
 
-  private final val channel = "default-chat-channel"
+  final val channel = "default-chat-channel"
 
-}
+  sealed abstract class Message
+  final case class FromRedis(data: String) extends Message
+  final case class WebSocketEvent(message: SocketCallback) extends Message
 
-final class SessionManager(config: RedisActor.Config, redisClient: RedisClient) extends Actor{
-
-  private[this] val subscriber: ActorRef = {
-    val actor = context.actorOf(RedisActor(config), "subscriber")
-    actor ! SUBSCRIBE(SessionManager.channel)
-    context.watch(actor)
-    actor
+  private implicit class WebSocketOps(private val self: WebSocket) extends AnyVal {
+    def getId: Int = self.channel.##
   }
 
-  private def createChild(socket: WebSocket): ActorRef = {
-    val id = socket.channel.##.toString
-    val child = context.actorOf(Props(new Session(Session.Config(socket))), id)
-    context.watch(child)
-    child
-  }
+  def apply(config: RedisActor.Config, redisClient: RedisClient): Actor[Message] = {
+    val sessions: mutable.Map[Int, Actor[Session.Message]] = mutable.HashMap.empty
 
-  private def publish(from: WebSocket, message: String): Unit ={
-    redisClient.publish(SessionManager.channel, from.channel.## + "|" + message)
-  }
+    def createChild(socket: WebSocket): Unit = {
+      sessions.update(socket.getId, Session(Session.Config(socket)))
+    }
 
-  override def receive = {
-    case redis.api.pubsub.Message(channel, data) =>
-      val message = Session.Message(data)
-      context.children.foreach(_ ! message)
-    case Open(s) =>
-      publish(s, "joined")
-      createChild(s)
-      s.send("sys|hola!")
-    case Message(s, Text(msg)) =>
-      publish(s, msg)
-    case Close(s) =>
-      val id = s.channel.##.toString
-      context.child(id).foreach{
-        _ ! PoisonPill
+    def publish(from: WebSocket, message: String): Unit ={
+      redisClient.publish(SessionManager.channel, from.getId + "|" + message)
+    }
+
+    new Actor({
+      case FromRedis(data) =>
+        val message = Session.Message(data)
+        sessions.values.foreach(_ ! message)
+      case WebSocketEvent(message) => message match {
+        case Open(s) =>
+          publish(s, "joined")
+          createChild(s)
+          s.send("sys|hola!")
+        case WebSocketMessage(s, Text(msg)) =>
+          publish(s, msg)
+        case Close(s) =>
+          publish(s, "left")
+        case Error(s, e) =>
+          e.printStackTrace()
       }
-      publish(s, "left")
-    case Error(s, e) =>
-      e.printStackTrace()
-    case Terminated(actor) =>
-      println("terminated " + actor)
+    }, _.printStackTrace())
   }
 
-  override def postStop(): Unit ={
-    subscriber ! UNSUBSCRIBE(SessionManager.channel)
-    subscriber ! PoisonPill
-  }
 }
+
