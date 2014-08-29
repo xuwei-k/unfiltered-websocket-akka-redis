@@ -1,9 +1,10 @@
 import akka.actor.{Props, ActorSystem}
 import redis.RedisClient
+import unfiltered.request.{Seg, Path, GET}
+import unfiltered.response.Html5
 
 object App {
   import unfiltered.util._
-  import unfiltered.response.ResponseString
 
   def main(args: Array[String]) {
     val system = ActorSystem("websocket-chat")
@@ -14,19 +15,29 @@ object App {
     val manager = system.actorOf(Props(new SessionManager(config, publisher)), "session-manager")
 
     try{
-      unfiltered.netty.Http(5679).handler(unfiltered.netty.websockets.Planify({
-        case _ => {
-          case message =>
-            manager ! message
+      unfiltered.netty.Server.anylocal.handler(
+        unfiltered.netty.websockets.Planify({
+          case _ => {
+            case message =>
+              manager ! message
+          }
+        })
+      ).run { websocketServer =>
+
+        val websocketPort = websocketServer.ports.head
+        val htmlResponse = Html5(View(websocketPort))
+
+        unfiltered.netty.Server.anylocal.handler(
+          unfiltered.netty.cycle.Planify{
+            case GET(Path(Seg(Nil))) =>
+              htmlResponse
+          }
+        ).run{ htmlServer =>
+          (1 to 2).foreach { i =>
+            Browser.open("http://localhost:" + htmlServer.ports.head + "/")
+          }
         }
-      }))
-      .handler(unfiltered.netty.cycle.Planify{
-        case _ => ResponseString("not a websocket")
-      })
-      .run { s =>
-        (1 to 4).foreach { i =>
-          Browser.open("file://%s".format(App.getClass.getResource("client.html").getFile))
-        }
+
       }
     }finally{
       println("actor system shutdown")
