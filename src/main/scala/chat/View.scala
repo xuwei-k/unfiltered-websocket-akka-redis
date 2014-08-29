@@ -1,3 +1,5 @@
+package chat
+
 object View {
   private[this] val style = <style type="text/css"><![CDATA[
     * { margin:0; padding:0; }

@@ -1,3 +1,5 @@
+package chat
+
 import akka.actor.{Props, ActorSystem}
 import redis.RedisClient
 import unfiltered.request.{Seg, Path, GET}

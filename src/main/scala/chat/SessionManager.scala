@@ -1,3 +1,5 @@
+package chat
+
 import akka.actor._
 import redis.RedisClient
 import redis.api.pubsub.{UNSUBSCRIBE, SUBSCRIBE}

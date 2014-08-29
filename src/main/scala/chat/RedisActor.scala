@@ -1,6 +1,7 @@
-import java.net.InetSocketAddress
+package chat
 
 import akka.actor.Props
+import java.net.InetSocketAddress
 import redis.actors.RedisSubscriberActor
 import redis.api.pubsub.{PMessage, Message}
 

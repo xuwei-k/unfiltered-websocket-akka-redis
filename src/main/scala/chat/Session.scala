@@ -1,3 +1,5 @@
+package chat
+
 import Session.{Message, Config}
 import akka.actor._
 import unfiltered.netty.websockets.WebSocket
